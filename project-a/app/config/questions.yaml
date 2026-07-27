@@ -1,0 +1,658 @@
+metadata:
+  version: "1.0"
+  total_questions: 42
+  dimensions: 6
+  questions_per_dimension: 7
+
+dimensions:
+  - id: data_infrastructure
+    label: "Data & Data Infrastructure"
+    description: "Assess the quality, accessibility, and governance of your data assets and pipelines."
+    weight: 1.0
+    questions:
+      - id: di_01
+        text: "How is your training and inference data primarily stored and managed?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Data is scattered across local files, spreadsheets, and ad-hoc storage"
+            value: 1
+          - label: "Data is stored in a central database or data warehouse but with limited governance"
+            value: 2
+          - label: "A managed data lake or warehouse exists with basic cataloguing"
+            value: 3
+          - label: "A governed data platform with lineage tracking and access controls is in place"
+            value: 4
+          - label: "A fully automated, self-service data platform with real-time quality monitoring"
+            value: 5
+
+      - id: di_02
+        text: "How would you describe the quality and consistency of data used in your AI systems?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Data quality is unknown or largely unvalidated"
+            value: 1
+          - label: "Basic validation exists but quality issues are discovered reactively"
+            value: 2
+          - label: "Data quality checks are defined and run periodically"
+            value: 3
+          - label: "Automated data quality pipelines run continuously with alerting"
+            value: 4
+          - label: "Data quality is proactively managed with SLAs and published metrics"
+            value: 5
+
+      - id: di_03
+        text: "How mature are your data pipelines for feeding AI/ML systems?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Pipelines are manual or script-based with no orchestration"
+            value: 1
+          - label: "Some pipelines are automated but fragile and undocumented"
+            value: 2
+          - label: "Pipelines are orchestrated (e.g. Airflow, Prefect) with basic monitoring"
+            value: 3
+          - label: "Pipelines are versioned, tested, and have automated failure recovery"
+            value: 4
+          - label: "Pipelines are fully automated, self-healing, and support real-time streaming"
+            value: 5
+
+      - id: di_04
+        text: "How is data access and privacy managed across your AI systems?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No formal access controls; data is broadly accessible"
+            value: 1
+          - label: "Basic access controls exist but are manually managed"
+            value: 2
+          - label: "Role-based access controls are in place with audit logging"
+            value: 3
+          - label: "Fine-grained access controls, PII detection, and data masking are automated"
+            value: 4
+          - label: "Full data governance with automated compliance, consent management, and audits"
+            value: 5
+
+      - id: di_05
+        text: "To what extent do you track data lineage (where data comes from and how it transforms)?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Not at all — no lineage tracking exists"
+          2: "Minimal — some documentation exists but not systematic"
+          3: "Partial — lineage tracked for critical datasets only"
+          4: "Mostly — automated lineage tracking across most pipelines"
+          5: "Fully — end-to-end automated lineage with visualisation tools"
+
+      - id: di_06
+        text: "How well does your organisation manage feature engineering and feature reuse across teams?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Features are created ad-hoc per project with no reuse"
+            value: 1
+          - label: "Some features are shared informally between teams"
+            value: 2
+          - label: "A basic feature store or shared repository exists"
+            value: 3
+          - label: "A managed feature store is in use with versioning and discovery"
+            value: 4
+          - label: "A centralised feature platform supports real-time and batch features across all teams"
+            value: 5
+
+      - id: di_07
+        text: "How confident are you that your data infrastructure can scale to support 10x your current AI workload?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Not confident — current infrastructure would break"
+          2: "Slightly confident — major rework would be needed"
+          3: "Moderately confident — some scaling work required"
+          4: "Confident — infrastructure is designed to scale"
+          5: "Very confident — auto-scaling is in place and tested"
+
+  - id: model_development
+    label: "Model Development & MLOps"
+    description: "Evaluate your practices around model building, experimentation, versioning, and deployment."
+    weight: 1.0
+    questions:
+      - id: md_01
+        text: "How do you manage and track model experiments?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No tracking — experiments are run in notebooks with no record"
+            value: 1
+          - label: "Manual tracking in spreadsheets or documents"
+            value: 2
+          - label: "An experiment tracking tool is used (e.g. MLflow, W&B) by some teams"
+            value: 3
+          - label: "Experiment tracking is standardised across all ML teams"
+            value: 4
+          - label: "Automated experiment tracking with hyperparameter optimisation and comparison dashboards"
+            value: 5
+
+      - id: md_02
+        text: "How are trained models versioned and stored?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Models are saved locally or in ad-hoc storage with no versioning"
+            value: 1
+          - label: "Models are stored centrally but versioning is manual"
+            value: 2
+          - label: "A model registry is in use with basic versioning"
+            value: 3
+          - label: "A governed model registry tracks versions, lineage, and approvals"
+            value: 4
+          - label: "Automated model lifecycle management with promotion, deprecation, and rollback"
+            value: 5
+
+      - id: md_03
+        text: "How mature is your CI/CD process for deploying ML models to production?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No CI/CD — models are deployed manually"
+            value: 1
+          - label: "Basic scripts automate some deployment steps"
+            value: 2
+          - label: "A CI/CD pipeline exists for ML but is separate from software CI/CD"
+            value: 3
+          - label: "ML CI/CD is integrated with software delivery pipelines"
+            value: 4
+          - label: "Fully automated MLOps pipelines with canary deployments and automated rollback"
+            value: 5
+
+      - id: md_04
+        text: "How do you test models before deploying them to production?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No formal testing — models go straight to production"
+            value: 1
+          - label: "Manual performance evaluation on a holdout set"
+            value: 2
+          - label: "Automated performance tests and regression checks exist"
+            value: 3
+          - label: "Comprehensive test suites including fairness, robustness, and data drift checks"
+            value: 4
+          - label: "Full automated model validation gates with shadow mode and A/B testing"
+            value: 5
+
+      - id: md_05
+        text: "How is model performance monitored after deployment?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No monitoring — issues are discovered from user complaints"
+            value: 1
+          - label: "Basic logging exists but is reviewed manually and infrequently"
+            value: 2
+          - label: "Performance metrics are tracked with dashboards and manual alerting"
+            value: 3
+          - label: "Automated drift detection and performance alerting is in place"
+            value: 4
+          - label: "Fully automated monitoring with self-healing retraining pipelines"
+            value: 5
+
+      - id: md_06
+        text: "How consistently do your teams use reproducible environments for model development?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Not at all — environments are inconsistent across developers"
+          2: "Rarely — some developers use virtual environments"
+          3: "Sometimes — containerisation is used on some projects"
+          4: "Mostly — containers and environment pinning are standard practice"
+          5: "Always — fully reproducible environments enforced via tooling"
+
+      - id: md_07
+        text: "What is your average time from model training completion to production deployment?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Weeks to months — deployment is a major project"
+            value: 1
+          - label: "1-2 weeks with significant manual effort"
+            value: 2
+          - label: "A few days with a defined process"
+            value: 3
+          - label: "Hours to 1 day with automated pipelines"
+            value: 4
+          - label: "Continuous deployment — models deploy automatically upon passing validation"
+            value: 5
+
+  - id: platform_infrastructure
+    label: "Platform & Infrastructure"
+    description: "Assess your compute, cloud, orchestration, and observability capabilities for AI workloads."
+    weight: 1.0
+    questions:
+      - id: pi_01
+        text: "How is compute infrastructure for AI/ML workloads provisioned and managed?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "On-premise servers or developer laptops with no dedicated AI infrastructure"
+            value: 1
+          - label: "Cloud VMs provisioned manually on demand"
+            value: 2
+          - label: "Managed cloud ML services used (e.g. SageMaker, Vertex AI) for some workloads"
+            value: 3
+          - label: "Infrastructure as code with auto-scaling for training and inference"
+            value: 4
+          - label: "Fully automated, cost-optimised AI platform with GPU orchestration and spot instances"
+            value: 5
+
+      - id: pi_02
+        text: "How do you manage and schedule ML training jobs and batch inference workloads?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Jobs are run manually by engineers"
+            value: 1
+          - label: "Basic cron jobs or scripts handle scheduling"
+            value: 2
+          - label: "An orchestration tool is used (e.g. Airflow, Kubeflow) for some workflows"
+            value: 3
+          - label: "All ML workflows are orchestrated with dependency management and retry logic"
+            value: 4
+          - label: "Dynamic, event-driven pipeline orchestration with resource optimisation"
+            value: 5
+
+      - id: pi_03
+        text: "How is observability (logging, metrics, tracing) implemented for your AI systems?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No observability — logs are reviewed only when issues occur"
+            value: 1
+          - label: "Basic application logging exists"
+            value: 2
+          - label: "Centralised logging and metrics dashboards are in place"
+            value: 3
+          - label: "Full observability stack with distributed tracing and anomaly detection"
+            value: 4
+          - label: "AI-specific observability including prediction monitoring, data drift, and explainability"
+            value: 5
+
+      - id: pi_04
+        text: "How mature is your model serving infrastructure?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Models are served from scripts or notebooks — no production serving layer"
+            value: 1
+          - label: "Simple REST APIs wrap models with no SLA guarantees"
+            value: 2
+          - label: "Models are served via a managed service with basic scaling"
+            value: 3
+          - label: "Model serving has auto-scaling, load balancing, and latency SLAs"
+            value: 4
+          - label: "Multi-model serving platform with A/B testing, canary releases, and real-time monitoring"
+            value: 5
+
+      - id: pi_05
+        text: "How well does your infrastructure support both online (real-time) and offline (batch) AI workloads?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Only batch workloads are supported"
+          2: "Real-time is possible but requires significant manual setup"
+          3: "Both are supported but managed separately"
+          4: "Both are well supported with shared infrastructure where possible"
+          5: "Unified platform handles both seamlessly with shared feature serving"
+
+      - id: pi_06
+        text: "How is infrastructure cost for AI workloads tracked and optimised?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No cost tracking specific to AI workloads"
+            value: 1
+          - label: "Costs are reviewed monthly at a cloud account level"
+            value: 2
+          - label: "AI workload costs are tagged and tracked per project"
+            value: 3
+          - label: "Cost budgets and alerts are in place with regular optimisation reviews"
+            value: 4
+          - label: "Automated cost optimisation with spot instances, right-sizing, and showback reports"
+            value: 5
+
+      - id: pi_07
+        text: "How mature is your disaster recovery and business continuity planning for AI systems?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "No DR planning for AI systems"
+          2: "Informal backups exist but no tested recovery process"
+          3: "DR plans exist and are documented"
+          4: "DR is regularly tested with defined RTO/RPO targets"
+          5: "Fully automated failover with multi-region redundancy and continuous DR testing"
+
+  - id: governance_risk
+    label: "AI Governance & Risk"
+    description: "Evaluate your approach to responsible AI, compliance, explainability, and risk management."
+    weight: 1.0
+    questions:
+      - id: gr_01
+        text: "Does your organisation have a formal AI ethics or responsible AI policy?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No policy exists"
+            value: 1
+          - label: "Informal guidelines exist but are not documented or enforced"
+            value: 2
+          - label: "A policy exists but adoption is inconsistent across teams"
+            value: 3
+          - label: "A formal policy is in place and referenced in all AI projects"
+            value: 4
+          - label: "A comprehensive responsible AI framework is embedded in all delivery processes"
+            value: 5
+
+      - id: gr_02
+        text: "How do you assess and mitigate bias in your AI models?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Bias is not formally assessed"
+            value: 1
+          - label: "Bias is occasionally considered but no formal process exists"
+            value: 2
+          - label: "Bias assessments are conducted for some high-risk models"
+            value: 3
+          - label: "Automated bias detection is part of the model validation pipeline"
+            value: 4
+          - label: "Continuous bias monitoring with remediation workflows and audit trails"
+            value: 5
+
+      - id: gr_03
+        text: "How explainable are the AI models currently in production?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Models are black boxes with no explainability"
+            value: 1
+          - label: "Some post-hoc explanations are generated manually on request"
+            value: 2
+          - label: "Explainability tools (e.g. SHAP, LIME) are used on some models"
+            value: 3
+          - label: "Explainability is a standard requirement for all production models"
+            value: 4
+          - label: "Real-time explainability is embedded in model serving for all decisions"
+            value: 5
+
+      - id: gr_04
+        text: "How does your organisation manage regulatory and compliance requirements for AI?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Compliance requirements are not considered in AI development"
+            value: 1
+          - label: "Compliance is addressed reactively when issues arise"
+            value: 2
+          - label: "Known regulations (e.g. GDPR, EU AI Act) are considered during design"
+            value: 3
+          - label: "Compliance requirements are integrated into the AI development lifecycle"
+            value: 4
+          - label: "Automated compliance checks with full audit trails and regulatory reporting"
+            value: 5
+
+      - id: gr_05
+        text: "Are model cards or datasheets produced for AI systems in production?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No documentation of this type exists"
+            value: 1
+          - label: "Some informal documentation exists for a few models"
+            value: 2
+          - label: "Model cards are produced for high-risk models only"
+            value: 3
+          - label: "Model cards are standard for all production models"
+            value: 4
+          - label: "Automated model card generation is part of the deployment pipeline"
+            value: 5
+
+      - id: gr_06
+        text: "How mature is your AI incident response process?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "No incident response process for AI-specific failures"
+          2: "AI incidents are handled through the general IT incident process"
+          3: "A basic AI incident playbook exists"
+          4: "A defined AI incident response process with clear escalation paths"
+          5: "Fully automated AI incident detection, triage, and response with post-mortems"
+
+      - id: gr_07
+        text: "How confident are you in your organisation's ability to audit decisions made by AI systems?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Not confident — AI decisions cannot be audited"
+          2: "Slightly confident — some logs exist but are incomplete"
+          3: "Moderately confident — audit trails exist for most systems"
+          4: "Confident — comprehensive audit logs with tooling for review"
+          5: "Very confident — full decision audit capability with automated reporting"
+
+  - id: team_culture
+    label: "Team & Culture"
+    description: "Assess the skills, organisational structure, and cultural readiness for AI at scale."
+    weight: 1.0
+    questions:
+      - id: tc_01
+        text: "How would you describe the AI/ML skill distribution across your engineering organisation?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No dedicated AI/ML skills — experimentation is done by generalist engineers"
+            value: 1
+          - label: "One or two individuals have AI/ML skills but no dedicated team"
+            value: 2
+          - label: "A small dedicated ML team exists but is siloed from product engineering"
+            value: 3
+          - label: "ML engineers are embedded across multiple product teams"
+            value: 4
+          - label: "AI/ML expertise is distributed organisation-wide with a platform team enabling all"
+            value: 5
+
+      - id: tc_02
+        text: "How does your organisation structure AI teams?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No formal AI team structure"
+            value: 1
+          - label: "A centralised AI team takes all requests from the business"
+            value: 2
+          - label: "A centre of excellence model with some embedded practitioners"
+            value: 3
+          - label: "Federated model — embedded ML engineers with central platform support"
+            value: 4
+          - label: "Fully distributed AI capability with a strong internal developer platform"
+            value: 5
+
+      - id: tc_03
+        text: "How actively does your organisation invest in AI/ML skills development?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No formal investment in AI skills development"
+            value: 1
+          - label: "Ad-hoc training is approved on request"
+            value: 2
+          - label: "A learning budget exists and some structured AI training is available"
+            value: 3
+          - label: "Regular AI upskilling programmes run across engineering and the business"
+            value: 4
+          - label: "A continuous AI learning culture with internal communities, guilds, and mentoring"
+            value: 5
+
+      - id: tc_04
+        text: "How strong is executive and leadership support for AI initiatives?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "AI is not a leadership priority"
+          2: "Leadership is aware of AI but support is passive"
+          3: "Leadership endorses AI but investment is inconsistent"
+          4: "Leadership actively champions AI with dedicated budget and strategic goals"
+          5: "AI is a board-level strategic priority with a clear multi-year roadmap"
+
+      - id: tc_05
+        text: "How well do your business and data/AI teams collaborate on AI projects?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Business and AI teams operate independently with minimal interaction"
+            value: 1
+          - label: "Collaboration happens but is ad-hoc and driven by individuals"
+            value: 2
+          - label: "Structured handoffs exist between business and AI teams"
+            value: 3
+          - label: "Cross-functional teams with business and AI working together from day one"
+            value: 4
+          - label: "Fully integrated product teams where AI is a native capability"
+            value: 5
+
+      - id: tc_06
+        text: "How would you rate AI literacy (understanding of AI capabilities and limitations) across non-technical staff?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Very low — most staff have no understanding of AI"
+          2: "Low — awareness exists but understanding is superficial"
+          3: "Moderate — key stakeholders understand AI basics"
+          4: "Good — broad AI literacy across the organisation"
+          5: "High — organisation-wide AI fluency with ongoing education programmes"
+
+      - id: tc_07
+        text: "How does your organisation handle failed AI experiments or projects?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Failures are not discussed — there is a blame culture"
+            value: 1
+          - label: "Failures are acknowledged but learnings are not captured"
+            value: 2
+          - label: "Post-mortems are conducted for significant failures"
+            value: 3
+          - label: "A blameless learning culture exists with documented retrospectives"
+            value: 4
+          - label: "Failures are celebrated as learning opportunities with organisation-wide sharing"
+            value: 5
+
+  - id: business_integration
+    label: "Business Integration"
+    description: "Evaluate how effectively AI is integrated into products, decisions, and business value delivery."
+    weight: 1.0
+    questions:
+      - id: bi_01
+        text: "How many AI models or systems are currently running in production?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "None — AI is in experimentation or PoC stage only"
+            value: 1
+          - label: "1-2 models in production"
+            value: 2
+          - label: "3-10 models in production"
+            value: 3
+          - label: "10-50 models in production"
+            value: 4
+          - label: "50+ models in production across multiple business domains"
+            value: 5
+
+      - id: bi_02
+        text: "How is the business value of AI systems measured?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Business value is not formally measured"
+            value: 1
+          - label: "Value is assessed informally through stakeholder feedback"
+            value: 2
+          - label: "Basic KPIs are defined for AI projects but not consistently tracked"
+            value: 3
+          - label: "Clear ROI metrics are defined and tracked for all production AI systems"
+            value: 4
+          - label: "Real-time business value dashboards with automated ROI reporting"
+            value: 5
+
+      - id: bi_03
+        text: "How well are AI capabilities integrated into your core products or services?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "AI is separate from core products — used only for internal tooling"
+            value: 1
+          - label: "AI features exist in products but are bolt-ons, not core to the experience"
+            value: 2
+          - label: "AI is a significant feature in some products"
+            value: 3
+          - label: "AI is a core differentiator in most products"
+            value: 4
+          - label: "AI is fundamental to the product strategy and customer value proposition"
+            value: 5
+
+      - id: bi_04
+        text: "How mature is the feedback loop between AI system outputs and model improvement?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "No feedback loop — models are static after deployment"
+            value: 1
+          - label: "Feedback is collected manually and used infrequently for retraining"
+            value: 2
+          - label: "Structured feedback collection feeds into periodic retraining cycles"
+            value: 3
+          - label: "Automated feedback loops trigger retraining based on performance thresholds"
+            value: 4
+          - label: "Continuous learning systems with online learning and real-time model updates"
+            value: 5
+
+      - id: bi_05
+        text: "How are AI project priorities determined in your organisation?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "AI projects are driven by technical curiosity with no business alignment"
+            value: 1
+          - label: "Business requests AI projects but prioritisation is informal"
+            value: 2
+          - label: "A defined process exists for AI project intake and prioritisation"
+            value: 3
+          - label: "AI prioritisation is tied to strategic OKRs with a formal governance process"
+            value: 4
+          - label: "AI investments are managed as a portfolio with value-based prioritisation"
+            value: 5
+
+      - id: bi_06
+        text: "To what degree does your organisation use AI to improve internal operations and processes?"
+        type: likert
+        weight: 1.0
+        scale:
+          1: "Not at all — AI is only used in customer-facing products"
+          2: "Minimal — one or two internal tools use AI"
+          3: "Moderate — AI is used in several internal processes"
+          4: "Significant — AI drives efficiency across most business functions"
+          5: "Extensive — AI is embedded across the entire value chain internally"
+
+      - id: bi_07
+        text: "How well does your organisation manage the change management required to adopt AI?"
+        type: multiple_choice
+        weight: 1.0
+        options:
+          - label: "Change management is not considered for AI rollouts"
+            value: 1
+          - label: "Change is managed reactively when resistance is encountered"
+            value: 2
+          - label: "Basic change management plans are created for major AI deployments"
+            value: 3
+          - label: "Structured change management is standard for all AI initiatives"
+            value: 4
+          - label: "AI adoption is supported by a dedicated change and enablement function"
+            value: 5
