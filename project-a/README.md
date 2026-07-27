@@ -23,6 +23,23 @@ This tool enables engineering leaders to assess the maturity of their AI platfor
 - **Admin panel** for organisation and user management
 
 ---
+## Screenshots
+
+### Login
+![Login](docs/screenshots/01-login.png)
+
+### Dashboard
+![Dashboard](docs/screenshots/02-dashboard.png)
+
+### Scorecard & Radar Chart
+![Scorecard](docs/screenshots/03-scorecard.png)
+
+### AI-Powered Analysis
+![AI Analysis](docs/screenshots/04-ai-analysis.png)
+
+### 6-Month Roadmap
+![Roadmap](docs/screenshots/05-roadmap.png)
+
 
 ## Maturity Framework
 
