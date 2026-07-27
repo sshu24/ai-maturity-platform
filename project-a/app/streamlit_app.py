@@ -1,8 +1,9 @@
 import sys
 import os
 sys.path.insert(0, "/app")
+from app.styles import inject_styles, tier_badge, stat_card
 
-import streamlit as st
+import streamlit as st # type: ignore
 import requests
 import plotly.graph_objects as go
 
@@ -203,6 +204,7 @@ def build_radar_chart(dimension_scores: list) -> go.Figure:
 # ------------------------------------------------------------------
 
 def show_login_page():
+    inject_styles()
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.title("AI Platform Maturity Assessment")
@@ -229,6 +231,7 @@ def show_login_page():
 # ------------------------------------------------------------------
 
 def show_dashboard():
+    inject_styles()
     render_sidebar()
     role = st.session_state.get("role", "")
     name = st.session_state.get("full_name", "User")
@@ -310,6 +313,7 @@ def show_dashboard():
 # ------------------------------------------------------------------
 
 def show_assessment_page():
+    inject_styles()
     require_page_role("super_admin", "client_admin", "assessor")
 
     assessment_id = st.session_state.get("assessment_id")
@@ -432,6 +436,7 @@ def show_assessment_page():
 # ------------------------------------------------------------------
 
 def show_scorecard_page():
+    inject_styles()
     st.sidebar.empty()
     render_sidebar()
 
@@ -649,13 +654,14 @@ def show_scorecard_page():
                 phase_num = phase.get("phase", 0)
                 phase_color = phase_colors.get(phase_num, "#95a5a6")
                 st.markdown(
-                    f"""<div style="background:{phase_color};color:white;padding:12px 16px;
-                        border-radius:6px 6px 0 0;margin-top:20px;">
-                        <div style="font-size:12px;font-weight:600;text-transform:uppercase;opacity:0.85;">
-                            Phase {phase_num} — {phase.get('months', '')}</div>
-                        <div style="font-size:18px;font-weight:700;">{phase.get('name', '')}</div>
-                        <div style="font-size:13px;opacity:0.9;margin-top:4px;">{phase.get('theme', '')}</div>
-                    </div>""", unsafe_allow_html=True
+                 #   f"""<div style="background:{phase_color};color:white;padding:12px 16px;
+                 #       border-radius:6px 6px 0 0;margin-top:20px;">
+                 #       <div style="font-size:12px;font-weight:600;text-transform:uppercase;opacity:0.85;">
+                 #          Phase {phase_num} — {phase.get('months', '')}</div>
+                 #       <div style="font-size:18px;font-weight:700;">{phase.get('name', '')}</div>
+                 #       <div style="font-size:13px;opacity:0.9;margin-top:4px;">{phase.get('theme', '')}</div>
+                 #   </div>""", unsafe_allow_html=True
+                    tier_badge(tier, data['maturity_label'], data['overall_score'])
                 )
                 for init in phase.get("initiatives", []):
                     effort = init.get("effort", "Medium")
@@ -701,6 +707,7 @@ def show_scorecard_page():
 # ------------------------------------------------------------------
 
 def show_admin_page():
+    inject_styles()
     require_page_role("super_admin", "client_admin")
     render_sidebar()
     role = st.session_state.get("role", "")
@@ -922,6 +929,7 @@ def show_admin_page():
 # ------------------------------------------------------------------
 
 def show_history_page():
+    inject_styles()
     render_sidebar()
     st.title("Assessment History")
     st.caption("Track your AI maturity progress over time.")
