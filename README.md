@@ -8,8 +8,43 @@ A full-stack AI-powered platform for assessing, scoring, and improving organisat
 
 ## Overview
 
-This tool enables engineering leaders to assess the maturity of their AI platform and teams across six dimensions, generate AI-powered analysis, and build a prioritised improvement roadmap — all in one platform.
+## The Problem
 
+Every organisation claims to be AI-first. Most aren't.
+
+Leadership teams at every level make ambitious AI commitments without truly understanding what mature AI requires — across data infrastructure, model development, platform engineering, governance, team capability, and business integration. The result is fragmented data, siloed systems, and AI initiatives that fail to deliver on their promise.
+
+The gap between AI aspiration and AI reality is costing organisations time, money, and competitive position.
+
+## What This Platform Does
+
+This tool grounds leadership in reality. Not with a consultant's opinion, but with a structured, evidence-based assessment across six dimensions — the same dimensions that separate AI leaders from AI laggards.
+
+It then uses AI to translate assessment results into language that matters to the boardroom:
+
+| Outcome | What it delivers |
+|---------|-----------------|
+| **Education** | Leaders understand what AI maturity actually means — not as a buzzword, but as a measurable capability across six concrete dimensions |
+| **Reality check** | Scores ground aspirational claims in evidence. You cannot argue with a 2.1 on data infrastructure when your pipelines are manual and ungoverned |
+| **Prioritised roadmap** | A phased improvement plan that answers the only question a CEO cares about: what do I invest in, in what order, and what business value does each initiative deliver? |
+| **Executive narrative** | AI-generated analysis that speaks to risk, opportunity, and ROI — not engineering metrics |
+
+## Business Impact
+
+For engineering leaders and consultants using this platform:
+
+- **Reduces assessment time** from 3-4 weeks of manual consulting to 2 hours of structured self-assessment
+- **Grounds AI strategy conversations** in evidence, not aspiration — enabling better investment decisions
+- **Prioritises initiatives by business value**, not just technical maturity score improvement
+- **Surfaces the cost of inaction** — what risk does leadership accept by delaying each initiative
+- **Enables repeatable assessment** — track maturity improvement over time with historical comparison
+
+For organisations being assessed:
+
+- Understand where they truly are on the AI maturity curve
+- Know exactly what to fix first, and why
+- Have a board-ready narrative on their AI investment strategy
+  
 ### Key Features
 
 - **42-question assessment** across 6 AI maturity dimensions based on Google MLOps and Gartner frameworks

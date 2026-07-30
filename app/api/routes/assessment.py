@@ -559,7 +559,8 @@ def generate_roadmap(
             "current_level": dim["tier"],
         })
 
-    prompt = f"""You are an expert AI platform maturity consultant.
+    prompt = f"""You are an expert AI platform maturity consultant advising C-suite and VP-level engineering leaders.
+
 An organisation has completed an AI maturity assessment with the following results:
 
 Overall Score: {result.overall_score}/5.0
@@ -568,20 +569,29 @@ Maturity Level: {result.maturity_label} (Level {result.maturity_tier})
 Dimension Scores:
 {json.dumps(dimension_summary, indent=2)}
 
+CONTEXT: Many organisations claim to be "AI-first" but lack the foundational capabilities to deliver on that promise. 
+This roadmap must ground leadership in reality — not just improve maturity scores, but deliver measurable business outcomes.
+Every initiative must answer three questions a CEO or board would ask:
+1. What business problem does this solve?
+2. What is the measurable business outcome?
+3. What is the cost of NOT doing this?
+
 Generate a practical 6-month AI maturity improvement roadmap organised into 3 phases.
-Focus on moving the organisation to the next maturity tier.
+Focus on moving the organisation to the next maturity tier with clear business value at each step.
 
 Return ONLY valid JSON in exactly this format, no markdown, no preamble:
 {{
-    "roadmap_summary": "2-3 sentence summary of the roadmap strategy and target state",
+    "roadmap_summary": "2-3 sentence summary of the roadmap strategy, target state, and primary business value delivered",
     "target_overall_score": 3.8,
     "target_maturity_label": "Managed",
+    "estimated_business_value": "One sentence on the aggregate business value of completing this roadmap",
     "phases": [
         {{
             "phase": 1,
             "name": "Foundation",
             "months": "Months 1-2",
             "theme": "One sentence describing the phase theme",
+            "business_objective": "What business outcome does this phase unlock?",
             "initiatives": [
                 {{
                     "title": "Initiative title",
@@ -591,24 +601,31 @@ Return ONLY valid JSON in exactly this format, no markdown, no preamble:
                     "effort": "Low|Medium|High",
                     "impact": "Low|Medium|High",
                     "dependencies": "None or name of prerequisite initiative",
-                    "score_improvement": 0.5
+                    "score_improvement": 0.5,
+                    "business_value": "Specific measurable business outcome — e.g. reduces model deployment time from weeks to hours, enabling 3x faster product iteration",
+                    "cost_of_inaction": "What happens if this is NOT done — e.g. continued manual pipelines mean each model release risks 2-3 weeks of delay and $50K+ in engineering cost",
+                    "roi_signal": "Quantified or directional ROI — e.g. 40% reduction in data engineering rework, freeing 2 FTE for higher-value work"
                 }}
             ],
             "target_dimension_scores": {{
                 "Data & Data Infrastructure": 2.8,
                 "Model Development & MLOps": 2.5
-            }}
+            }},
+            "phase_business_outcome": "Measurable outcome at end of this phase that a CEO would recognise as progress"
         }}
     ]
 }}
 
 Rules:
-- Phase 1 (Months 1-2): Foundation — quick wins and critical fixes
-- Phase 2 (Months 3-4): Acceleration — build on foundation, address key gaps
-- Phase 3 (Months 5-6): Optimisation — institutionalise and scale
+- Phase 1 (Months 1-2): Foundation — quick wins and critical fixes that unlock everything else
+- Phase 2 (Months 3-4): Acceleration — build on foundation, address key capability gaps
+- Phase 3 (Months 5-6): Optimisation — institutionalise, scale, and measure business impact
 - Each phase must have 3-4 initiatives
-- Be specific and actionable, reference actual dimension scores
-- target_dimension_scores in each phase should show realistic incremental improvement
+- business_value must be specific and measurable — avoid vague statements like "improves efficiency"
+- cost_of_inaction must be concrete — what risk or cost does leadership accept by delaying?
+- roi_signal must give a directional number or percentage where possible
+- Reference actual dimension scores in your reasoning
+- target_dimension_scores should show realistic incremental improvement per phase
 - Return ONLY valid JSON"""
 
     try:
