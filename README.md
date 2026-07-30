@@ -161,7 +161,7 @@ ai-maturity-platform/
 
 ```bash
 git clone https://github.com/sshu24/ai-maturity-platform.git
-cd ai-maturity-platform/project-a
+cd ai-maturity-platform
 ```
 
 ### 2. Configure environment
