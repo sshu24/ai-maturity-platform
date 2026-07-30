@@ -112,7 +112,7 @@ This tool enables engineering leaders to assess the maturity of their AI platfor
 ## Project Structure
 
 ```
-project-a/
+ai-maturity-platform/
 ├── app/
 │   ├── api/routes/          # FastAPI route handlers
 │   │   ├── auth.py          # Login, JWT, /me
