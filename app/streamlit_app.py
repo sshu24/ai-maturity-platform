@@ -569,7 +569,7 @@ def show_scorecard_page():
             st.rerun()
         elif analysis_status == "complete" and st.session_state.get("ai_analysis"):
             if st.button("Regenerate Analysis", key="regen_analysis"):
-                api_post(f"/assessments/{assessment_id}/analyse", data={}, timeout=10)
+                api_post(f"/assessments/{assessment_id}/analyse?force=true", data={}, timeout=10)
                 st.session_state.pop("ai_analysis", None)
                 st.rerun()
 
@@ -630,13 +630,25 @@ def show_scorecard_page():
                             </div>""", unsafe_allow_html=True
                         )
         else:
+            if analysis_status == "failed":
+                st.error(status_result["data"].get("error") or "Analysis generation failed.")
             if st.button("Generate AI Analysis", type="primary", key="gen_analysis"):
                 api_post(f"/assessments/{assessment_id}/analyse", data={}, timeout=10)
                 st.rerun()
             st.info("Click 'Generate AI Analysis' to get a personalised executive analysis.")
 
     with tab_roadmap:
-        n_state["ai_roadmap"] = cached_roadmap
+        st.subheader("AI-Generated 6-Month Roadmap")
+        st.caption("Powered by Claude — a prioritised improvement roadmap.")
+        st.divider()
+
+        # Check current status
+        status_result = api_get(f"/assessments/{assessment_id}/roadmap/status")
+        roadmap_status = status_result["data"].get("status", "pending") if status_result["ok"] else "pending"
+        cached_roadmap = status_result["data"].get("data") if status_result["ok"] else None
+
+        if cached_roadmap and roadmap_status == "complete":
+            st.session_state["ai_roadmap"] = cached_roadmap
 
         if roadmap_status == "generating":
             st.info("Claude is generating your roadmap... this page will refresh automatically.")
@@ -645,7 +657,7 @@ def show_scorecard_page():
             st.rerun()
         elif roadmap_status == "complete" and st.session_state.get("ai_roadmap"):
             if st.button("Regenerate Roadmap", key="regen_roadmap"):
-                api_post(f"/assessments/{assessment_id}/roadmap", data={}, timeout=10)
+                api_post(f"/assessments/{assessment_id}/roadmap?force=true", data={}, timeout=10)
                 st.session_state.pop("ai_roadmap", None)
                 st.rerun()
 
@@ -766,6 +778,8 @@ def show_scorecard_page():
                             with cols[i]:
                                 st.metric(label=dim_name.split("&")[0].strip(), value=f"{score:.2f}")
         else:
+            if roadmap_status == "failed":
+                st.error(status_result["data"].get("error") or "Roadmap generation failed.")
             if st.button("Generate Roadmap", type="primary", key="gen_roadmap"):
                 api_post(f"/assessments/{assessment_id}/roadmap", data={}, timeout=10)
                 st.rerun()
@@ -791,17 +805,7 @@ def show_admin_page():
         if stats_result["ok"]:
             stats = stats_result["data"]
             col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:st.subheader("AI-Generated 6-Month Roadmap")
-            st.caption("Powered by Claude — a prioritised improvement roadmap.")
-            st.divider()
- 
-            # Check current status
-            status_result = api_get(f"/assessments/{assessment_id}/roadmap/status")
-            roadmap_status = status_result["data"].get("status", "pending") if status_result["ok"] else "pending"
-            cached_roadmap = status_result["data"].get("data") if status_result["ok"] else None
- 
-            if cached_roadmap and roadmap_status == "complete":
-                st.sessio
+            with col1:
                 st.metric("Organisations", stats["total_orgs"])
             with col2:
                 st.metric("Users", stats["total_users"])

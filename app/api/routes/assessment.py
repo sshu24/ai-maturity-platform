@@ -1,19 +1,23 @@
-import os
-import httpx
-import json
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel
+import logging
+from datetime import datetime, timedelta
+from typing import Literal, Optional
 
-from app.db.connection import get_db
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from app.db.connection import get_db, SessionLocal
 from app.db.models import User, Assessment, Response, Result
 from app.auth.rbac import get_current_user, require_role
+from app.components import ai_agents
 from app.components.question_engine import load_question_bank, get_completion_status
 from app.components.scoring import compute_scorecard, score_summary
 from app.components.recommendations import get_all_recommendations
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from app.config.settings import get_settings
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
 
 router = APIRouter(prefix="/assessments", tags=["assessments"])
 
@@ -137,214 +141,114 @@ def _build_assessment_detail(assessment: Assessment, db: Session) -> AssessmentD
         completion=completion,
     )
 
-def _run_analyse_background(assessment_id: str, db: Session):
-    """Background task — calls Claude and saves analysis to DB."""
-    import json, httpx, os
+AIJobKind = Literal["analysis", "roadmap"]
+
+
+def _mark_job_failed(db: Session, assessment_id: str, kind: AIJobKind, message: str) -> None:
+    db.rollback()
+    result = db.query(Result).filter(Result.assessment_id == assessment_id).first()
+    if result:
+        setattr(result, f"{kind}_status", "failed")
+        setattr(result, f"{kind}_error", message)
+        db.commit()
+
+
+def _run_ai_job(assessment_id: str, kind: AIJobKind) -> None:
+    """Background task: generate analysis or roadmap with Claude and store it.
+
+    Opens its own session, because the request's session is closed by the
+    time background tasks run.
+    """
+    db = SessionLocal()
     try:
-        # Update status to generating
-        result = db.query(Result).filter(
-            Result.assessment_id == assessment_id
-        ).first()
-        result.analysis_status = "generating"
+        result = db.query(Result).filter(Result.assessment_id == assessment_id).first()
+        if not result:
+            logger.warning("AI %s job: no result for assessment %s", kind, assessment_id)
+            return
+
+        if kind == "analysis":
+            responses = db.query(Response).filter(
+                Response.assessment_id == assessment_id
+            ).all()
+            output = ai_agents.generate_analysis(result, responses, load_question_bank())
+        else:
+            output = ai_agents.generate_roadmap(result)
+
+        setattr(result, f"ai_{kind}", output)
+        setattr(result, f"{kind}_status", "complete")
+        setattr(result, f"{kind}_error", None)
         db.commit()
 
-        responses = db.query(Response).filter(
-            Response.assessment_id == assessment_id
-        ).all()
-        bank = load_question_bank()
-        dimension_context = []
-        for dim in bank.dimensions:
-            dim_responses = [r for r in responses if r.dimension == dim.id]
-            dim_score_data = next(
-                (d for d in result.dimension_scores if d["id"] == dim.id), {}
-            )
-            questions_answered = []
-            for q in dim.questions:
-                resp = next((r for r in dim_responses if r.question_id == q.id), None)
-                if resp and resp.answer_value <= 3:
-                    questions_answered.append({
-                        "question": q.text,
-                        "answer": resp.answer_label,
-                        "score": resp.answer_value,
-                    })
-            dimension_context.append({
-                "dimension": dim.label,
-                "score": dim_score_data.get("score", 0),
-                "tier": dim_score_data.get("tier_label", ""),
-                "responses": questions_answered,
-            })
-
-        prompt = f"""You are an expert AI platform maturity consultant.
-Overall Score: {result.overall_score}/5.0 — {result.maturity_label} (Level {result.maturity_tier})
-Dimension Scores and Responses:
-{json.dumps(dimension_context, indent=2)}
-Return ONLY valid JSON:
-{{
-    "executive_narrative": "3 paragraphs of executive narrative",
-    "executive_narrative_p2": "paragraph 2",
-    "executive_narrative_p3": "paragraph 3",
-    "cross_dimensional_risks": [{{"risk": "title", "description": "2-3 sentences", "dimensions_affected": ["dim1"]}}],
-    "quick_wins": [{{"action": "title", "description": "why high impact low effort", "expected_outcome": "outcome"}}],
-    "ninety_day_focus": [{{"priority": 1, "focus_area": "title", "rationale": "why now", "success_metric": "how to measure"}}]
-}}
-Provide exactly 3 items for each list. Return ONLY valid JSON."""
-
-        response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 8192,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=180.0,
-        )
-
-        content = response.json()["content"][0]["text"]
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        content = content.strip()
-        analysis = json.loads(content)
-
-        result.ai_analysis = analysis
-        result.analysis_status = "complete"
-        db.commit()
-
-    except Exception as e:
-        result = db.query(Result).filter(
-            Result.assessment_id == assessment_id
-        ).first()
-        if result:
-            result.analysis_status = "failed"
-            db.commit()
+    except ai_agents.AIGenerationError as e:
+        logger.warning("AI %s job failed for assessment %s: %s", kind, assessment_id, e, exc_info=True)
+        _mark_job_failed(db, assessment_id, kind, str(e))
+    except Exception:
+        logger.exception("AI %s job crashed for assessment %s", kind, assessment_id)
+        _mark_job_failed(db, assessment_id, kind, "Unexpected error during generation. Check the server logs.")
+    finally:
+        db.close()
 
 
-def _run_roadmap_background(assessment_id: str, db: Session):
-    """Background task — calls Claude and saves roadmap to DB."""
-    import json, httpx, os
-    try:
-        result = db.query(Result).filter(
-            Result.assessment_id == assessment_id
-        ).first()
-        result.roadmap_status = "generating"
-        db.commit()
+def _get_completed_result_or_404(assessment_id: str, db: Session, current_user: User) -> Result:
+    assessment = _get_assessment_or_404(assessment_id, db, current_user)
+    if assessment.status != "completed":
+        raise HTTPException(status_code=400, detail="Assessment must be completed first")
 
-        concise_summary = "\n".join([
-            f"- {d['label']}: {d['score']}/5.0 ({d['tier_label']})"
-            for d in result.dimension_scores
-        ])
+    result = db.query(Result).filter(Result.assessment_id == assessment_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return result
 
-        prompt = f"""You are an expert AI platform maturity consultant advising C-suite and VP-level engineering leaders.
 
-An organisation has completed an AI maturity assessment with the following results:
+def _start_ai_job(
+    assessment_id: str,
+    kind: AIJobKind,
+    force: bool,
+    background_tasks: BackgroundTasks,
+    db: Session,
+    current_user: User,
+) -> JobStatus:
+    result = _get_completed_result_or_404(assessment_id, db, current_user)
 
-Overall Score: {result.overall_score}/5.0
-Maturity Level: {result.maturity_label} (Level {result.maturity_tier})
+    data = getattr(result, f"ai_{kind}")
+    if data and getattr(result, f"{kind}_status") == "complete" and not force:
+        return JobStatus(status="complete", data=data)
 
-Dimension Scores:
-{concise_summary}
+    # Claim the job atomically so concurrent clicks don't start two generations.
+    # A job stuck in "generating" (e.g. the container restarted) can be reclaimed.
+    status_col = getattr(Result, f"{kind}_status")
+    started_col = getattr(Result, f"{kind}_started_at")
+    now = datetime.utcnow()
+    stale_before = now - timedelta(seconds=settings.AI_JOB_STALE_SECONDS)
+    claimed = db.query(Result).filter(
+        Result.id == result.id,
+        or_(
+            status_col.is_(None),
+            status_col != "generating",
+            started_col.is_(None),
+            started_col < stale_before,
+        ),
+    ).update(
+        {status_col: "generating", started_col: now, getattr(Result, f"{kind}_error"): None},
+        synchronize_session=False,
+    )
+    db.commit()
 
-CONTEXT: Many organisations claim to be "AI-first" but lack the foundational capabilities to deliver on that promise.
-This roadmap must ground leadership in reality — not just improve maturity scores, but deliver measurable business outcomes.
-Every initiative must answer three questions a CEO or board would ask:
-1. What business problem does this solve?
-2. What is the measurable business outcome?
-3. What is the cost of NOT doing this?
+    if claimed:
+        background_tasks.add_task(_run_ai_job, assessment_id, kind)
+    return JobStatus(status="generating")
 
-Generate a practical 6-month AI maturity improvement roadmap organised into 3 phases.
-Focus on moving the organisation to the next maturity tier with clear business value at each step.
 
-Return ONLY valid JSON in exactly this format, no markdown, no preamble:
-{{
-    "roadmap_summary": "2-3 sentence summary of the roadmap strategy, target state, and primary business value delivered",
-    "target_overall_score": 3.8,
-    "target_maturity_label": "Managed",
-    "estimated_business_value": "One sentence on the aggregate business value of completing this roadmap",
-    "phases": [
-        {{
-            "phase": 1,
-            "name": "Foundation",
-            "months": "Months 1-2",
-            "theme": "One sentence describing the phase theme",
-            "business_objective": "What business outcome does this phase unlock?",
-            "initiatives": [
-                {{
-                    "title": "Initiative title",
-                    "description": "2-3 sentence description of what to do and why",
-                    "dimension": "Dimension name this primarily addresses",
-                    "owner": "Job title of who should lead this",
-                    "effort": "Low|Medium|High",
-                    "impact": "Low|Medium|High",
-                    "dependencies": "None or name of prerequisite initiative",
-                    "score_improvement": 0.5,
-                    "business_value": "Specific measurable business outcome",
-                    "cost_of_inaction": "What happens if this is NOT done",
-                    "roi_signal": "Quantified or directional ROI"
-                }}
-            ],
-            "target_dimension_scores": {{
-                "Data & Data Infrastructure": 2.8,
-                "Model Development & MLOps": 2.5
-            }},
-            "phase_business_outcome": "Measurable outcome at end of this phase that a CEO would recognise as progress"
-        }}
-    ]
-}}
-
-Rules:
-- Phase 1 (Months 1-2): Foundation — quick wins and critical fixes that unlock everything else
-- Phase 2 (Months 3-4): Acceleration — build on foundation, address key capability gaps
-- Phase 3 (Months 5-6): Optimisation — institutionalise, scale, and measure business impact
-- Each phase must have 3-4 initiatives
-- business_value must be specific and measurable
-- cost_of_inaction must be concrete
-- roi_signal must give a directional number or percentage where possible
-- Reference actual dimension scores in your reasoning
-- target_dimension_scores should show realistic incremental improvement per phase
-- Return ONLY valid JSON"""
-
-        response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 8192,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=180.0,
-        )
-
-        content = response.json()["content"][0]["text"]
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        content = content.strip()
-        roadmap = json.loads(content)
-
-        result.ai_roadmap = roadmap
-        result.roadmap_status = "complete"
-        db.commit()
-
-    except Exception as e:
-        result = db.query(Result).filter(
-            Result.assessment_id == assessment_id
-        ).first()
-        if result:
-            result.roadmap_status = "failed"
-            db.commit()
+def _ai_job_status(assessment_id: str, kind: AIJobKind, db: Session, current_user: User) -> JobStatus:
+    _get_assessment_or_404(assessment_id, db, current_user)
+    result = db.query(Result).filter(Result.assessment_id == assessment_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return JobStatus(
+        status=getattr(result, f"{kind}_status") or "pending",
+        data=getattr(result, f"ai_{kind}"),
+        error=getattr(result, f"{kind}_error"),
+    )
 
 
 # ------------------------------------------------------------------
@@ -616,101 +520,48 @@ def get_result_summary(
     }
 
 
-@router.post("/{assessment_id}/analyse")
+@router.post("/{assessment_id}/analyse", response_model=JobStatus)
 def analyse_assessment(
     assessment_id: str,
     background_tasks: BackgroundTasks,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    assessment = _get_assessment_or_404(assessment_id, db, current_user)
-    if assessment.status != "completed":
-        raise HTTPException(status_code=400, detail="Assessment must be completed first")
-
-    result = db.query(Result).filter(
-        Result.assessment_id == assessment_id
-    ).first()
-    if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
-
-    # Return cached result if available
-    if result.ai_analysis and result.analysis_status == "complete":
-        return {"status": "complete", "data": result.ai_analysis}
-
-    # If already generating, return status
-    if result.analysis_status == "generating":
-        return {"status": "generating", "data": None}
-
-    # Trigger background job
-    background_tasks.add_task(_run_analyse_background, assessment_id, db)
-    return {"status": "generating", "data": None}
+    """Start AI analysis. Returns the cached analysis unless force=true."""
+    return _start_ai_job(assessment_id, "analysis", force, background_tasks, db, current_user)
 
 
-@router.post("/{assessment_id}/roadmap")
+@router.post("/{assessment_id}/roadmap", response_model=JobStatus)
 def generate_roadmap(
     assessment_id: str,
     background_tasks: BackgroundTasks,
+    force: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    assessment = _get_assessment_or_404(assessment_id, db, current_user)
-    if assessment.status != "completed":
-        raise HTTPException(status_code=400, detail="Assessment must be completed first")
-
-    result = db.query(Result).filter(
-        Result.assessment_id == assessment_id
-    ).first()
-    if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
-
-    # Return cached result if available
-    if result.ai_roadmap and result.roadmap_status == "complete":
-        return {"status": "complete", "data": result.ai_roadmap}
-
-    # If already generating, return status
-    if result.roadmap_status == "generating":
-        return {"status": "generating", "data": None}
-
-    # Trigger background job
-    background_tasks.add_task(_run_roadmap_background, assessment_id, db)
-    return {"status": "generating", "data": None}
+    """Start roadmap generation. Returns the cached roadmap unless force=true."""
+    return _start_ai_job(assessment_id, "roadmap", force, background_tasks, db, current_user)
 
 
-@router.get("/{assessment_id}/analyse/status")
+@router.get("/{assessment_id}/analyse/status", response_model=JobStatus)
 def get_analyse_status(
     assessment_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    _get_assessment_or_404(assessment_id, db, current_user)
-    result = db.query(Result).filter(
-        Result.assessment_id == assessment_id
-    ).first()
-    if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
-    return {
-        "status": result.analysis_status or "pending",
-        "data": result.ai_analysis
-    }
+    return _ai_job_status(assessment_id, "analysis", db, current_user)
 
 
-@router.get("/{assessment_id}/roadmap/status")
+@router.get("/{assessment_id}/roadmap/status", response_model=JobStatus)
 def get_roadmap_status(
     assessment_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    _get_assessment_or_404(assessment_id, db, current_user)
-    result = db.query(Result).filter(
-        Result.assessment_id == assessment_id
-    ).first()
-    if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
-    return {
-        "status": result.roadmap_status or "pending",
-        "data": result.ai_roadmap
-    }
-    
+    return _ai_job_status(assessment_id, "roadmap", db, current_user)
+
+
 @router.delete("/{assessment_id}", status_code=204)
 def delete_assessment(
     assessment_id: str,

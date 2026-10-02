@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import get_settings
@@ -6,6 +7,7 @@ from app.components.question_engine import load_question_bank
 from fastapi.encoders import jsonable_encoder
 
 settings = get_settings()
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 
 app = FastAPI(
     title="Project A — AI Maturity Platform",

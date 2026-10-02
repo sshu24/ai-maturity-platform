@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
+    # Claude
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-6"
+    AI_REQUEST_TIMEOUT_SECONDS: float = 120.0
+    # A job still "generating" after this long is treated as dead and can be restarted
+    AI_JOB_STALE_SECONDS: int = 600
+
     # App
     ENV: str = "development"
 

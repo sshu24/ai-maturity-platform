@@ -141,5 +141,9 @@ class Result(Base):
     ai_roadmap = Column(JSON, nullable=True)
     analysis_status = Column(String(20), nullable=True, default="pending")
     roadmap_status = Column(String(20), nullable=True, default="pending")
+    analysis_error = Column(Text, nullable=True)
+    roadmap_error = Column(Text, nullable=True)
+    analysis_started_at = Column(DateTime, nullable=True)
+    roadmap_started_at = Column(DateTime, nullable=True)
 
     assessment = relationship("Assessment", back_populates="result")
