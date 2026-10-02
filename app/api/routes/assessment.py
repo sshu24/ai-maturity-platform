@@ -13,6 +13,7 @@ from app.auth.rbac import get_current_user, require_role
 from app.components.question_engine import load_question_bank, get_completion_status
 from app.components.scoring import compute_scorecard, score_summary
 from app.components.recommendations import get_all_recommendations
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 
 router = APIRouter(prefix="/assessments", tags=["assessments"])
 
@@ -75,6 +76,10 @@ class ResultOut(BaseModel):
     class Config:
         from_attributes = True
 
+class JobStatus(BaseModel):
+    status: str        # "pending" | "generating" | "complete" | "failed"
+    data: dict | None = None
+    error: str | None = None
 
 # ------------------------------------------------------------------
 # Helpers
@@ -131,6 +136,215 @@ def _build_assessment_detail(assessment: Assessment, db: Session) -> AssessmentD
         ],
         completion=completion,
     )
+
+def _run_analyse_background(assessment_id: str, db: Session):
+    """Background task — calls Claude and saves analysis to DB."""
+    import json, httpx, os
+    try:
+        # Update status to generating
+        result = db.query(Result).filter(
+            Result.assessment_id == assessment_id
+        ).first()
+        result.analysis_status = "generating"
+        db.commit()
+
+        responses = db.query(Response).filter(
+            Response.assessment_id == assessment_id
+        ).all()
+        bank = load_question_bank()
+        dimension_context = []
+        for dim in bank.dimensions:
+            dim_responses = [r for r in responses if r.dimension == dim.id]
+            dim_score_data = next(
+                (d for d in result.dimension_scores if d["id"] == dim.id), {}
+            )
+            questions_answered = []
+            for q in dim.questions:
+                resp = next((r for r in dim_responses if r.question_id == q.id), None)
+                if resp and resp.answer_value <= 3:
+                    questions_answered.append({
+                        "question": q.text,
+                        "answer": resp.answer_label,
+                        "score": resp.answer_value,
+                    })
+            dimension_context.append({
+                "dimension": dim.label,
+                "score": dim_score_data.get("score", 0),
+                "tier": dim_score_data.get("tier_label", ""),
+                "responses": questions_answered,
+            })
+
+        prompt = f"""You are an expert AI platform maturity consultant.
+Overall Score: {result.overall_score}/5.0 — {result.maturity_label} (Level {result.maturity_tier})
+Dimension Scores and Responses:
+{json.dumps(dimension_context, indent=2)}
+Return ONLY valid JSON:
+{{
+    "executive_narrative": "3 paragraphs of executive narrative",
+    "executive_narrative_p2": "paragraph 2",
+    "executive_narrative_p3": "paragraph 3",
+    "cross_dimensional_risks": [{{"risk": "title", "description": "2-3 sentences", "dimensions_affected": ["dim1"]}}],
+    "quick_wins": [{{"action": "title", "description": "why high impact low effort", "expected_outcome": "outcome"}}],
+    "ninety_day_focus": [{{"priority": 1, "focus_area": "title", "rationale": "why now", "success_metric": "how to measure"}}]
+}}
+Provide exactly 3 items for each list. Return ONLY valid JSON."""
+
+        response = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 8192,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=180.0,
+        )
+
+        content = response.json()["content"][0]["text"]
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        content = content.strip()
+        analysis = json.loads(content)
+
+        result.ai_analysis = analysis
+        result.analysis_status = "complete"
+        db.commit()
+
+    except Exception as e:
+        result = db.query(Result).filter(
+            Result.assessment_id == assessment_id
+        ).first()
+        if result:
+            result.analysis_status = "failed"
+            db.commit()
+
+
+def _run_roadmap_background(assessment_id: str, db: Session):
+    """Background task — calls Claude and saves roadmap to DB."""
+    import json, httpx, os
+    try:
+        result = db.query(Result).filter(
+            Result.assessment_id == assessment_id
+        ).first()
+        result.roadmap_status = "generating"
+        db.commit()
+
+        concise_summary = "\n".join([
+            f"- {d['label']}: {d['score']}/5.0 ({d['tier_label']})"
+            for d in result.dimension_scores
+        ])
+
+        prompt = f"""You are an expert AI platform maturity consultant advising C-suite and VP-level engineering leaders.
+
+An organisation has completed an AI maturity assessment with the following results:
+
+Overall Score: {result.overall_score}/5.0
+Maturity Level: {result.maturity_label} (Level {result.maturity_tier})
+
+Dimension Scores:
+{concise_summary}
+
+CONTEXT: Many organisations claim to be "AI-first" but lack the foundational capabilities to deliver on that promise.
+This roadmap must ground leadership in reality — not just improve maturity scores, but deliver measurable business outcomes.
+Every initiative must answer three questions a CEO or board would ask:
+1. What business problem does this solve?
+2. What is the measurable business outcome?
+3. What is the cost of NOT doing this?
+
+Generate a practical 6-month AI maturity improvement roadmap organised into 3 phases.
+Focus on moving the organisation to the next maturity tier with clear business value at each step.
+
+Return ONLY valid JSON in exactly this format, no markdown, no preamble:
+{{
+    "roadmap_summary": "2-3 sentence summary of the roadmap strategy, target state, and primary business value delivered",
+    "target_overall_score": 3.8,
+    "target_maturity_label": "Managed",
+    "estimated_business_value": "One sentence on the aggregate business value of completing this roadmap",
+    "phases": [
+        {{
+            "phase": 1,
+            "name": "Foundation",
+            "months": "Months 1-2",
+            "theme": "One sentence describing the phase theme",
+            "business_objective": "What business outcome does this phase unlock?",
+            "initiatives": [
+                {{
+                    "title": "Initiative title",
+                    "description": "2-3 sentence description of what to do and why",
+                    "dimension": "Dimension name this primarily addresses",
+                    "owner": "Job title of who should lead this",
+                    "effort": "Low|Medium|High",
+                    "impact": "Low|Medium|High",
+                    "dependencies": "None or name of prerequisite initiative",
+                    "score_improvement": 0.5,
+                    "business_value": "Specific measurable business outcome",
+                    "cost_of_inaction": "What happens if this is NOT done",
+                    "roi_signal": "Quantified or directional ROI"
+                }}
+            ],
+            "target_dimension_scores": {{
+                "Data & Data Infrastructure": 2.8,
+                "Model Development & MLOps": 2.5
+            }},
+            "phase_business_outcome": "Measurable outcome at end of this phase that a CEO would recognise as progress"
+        }}
+    ]
+}}
+
+Rules:
+- Phase 1 (Months 1-2): Foundation — quick wins and critical fixes that unlock everything else
+- Phase 2 (Months 3-4): Acceleration — build on foundation, address key capability gaps
+- Phase 3 (Months 5-6): Optimisation — institutionalise, scale, and measure business impact
+- Each phase must have 3-4 initiatives
+- business_value must be specific and measurable
+- cost_of_inaction must be concrete
+- roi_signal must give a directional number or percentage where possible
+- Reference actual dimension scores in your reasoning
+- target_dimension_scores should show realistic incremental improvement per phase
+- Return ONLY valid JSON"""
+
+        response = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 8192,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=180.0,
+        )
+
+        content = response.json()["content"][0]["text"]
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        content = content.strip()
+        roadmap = json.loads(content)
+
+        result.ai_roadmap = roadmap
+        result.roadmap_status = "complete"
+        db.commit()
+
+    except Exception as e:
+        result = db.query(Result).filter(
+            Result.assessment_id == assessment_id
+        ).first()
+        if result:
+            result.roadmap_status = "failed"
+            db.commit()
 
 
 # ------------------------------------------------------------------
@@ -405,265 +619,97 @@ def get_result_summary(
 @router.post("/{assessment_id}/analyse")
 def analyse_assessment(
     assessment_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     assessment = _get_assessment_or_404(assessment_id, db, current_user)
-
     if assessment.status != "completed":
         raise HTTPException(status_code=400, detail="Assessment must be completed first")
 
     result = db.query(Result).filter(
         Result.assessment_id == assessment_id
     ).first()
-
     if not result:
         raise HTTPException(status_code=404, detail="Result not found")
 
-    responses = db.query(Response).filter(
-        Response.assessment_id == assessment_id
-    ).all()
+    # Return cached result if available
+    if result.ai_analysis and result.analysis_status == "complete":
+        return {"status": "complete", "data": result.ai_analysis}
 
-    bank = load_question_bank()
+    # If already generating, return status
+    if result.analysis_status == "generating":
+        return {"status": "generating", "data": None}
 
-    dimension_context = []
-    for dim in bank.dimensions:
-        dim_responses = [r for r in responses if r.dimension == dim.id]
-        dim_score_data = next(
-            (d for d in result.dimension_scores if d["id"] == dim.id), {}
-        )
-        questions_answered = []
-        for q in dim.questions:
-            resp = next((r for r in dim_responses if r.question_id == q.id), None)
-            if resp:
-                if resp.answer_value <= 3:
-                    questions_answered.append({
-                        "question": q.text,
-                        "answer": resp.answer_label,
-                        "score": resp.answer_value,
-                    })
-        dimension_context.append({
-            "dimension": dim.label,
-            "score": dim_score_data.get("score", 0),
-            "tier": dim_score_data.get("tier_label", ""),
-            "responses": questions_answered,
-        })
+    # Trigger background job
+    background_tasks.add_task(_run_analyse_background, assessment_id, db)
+    return {"status": "generating", "data": None}
 
-    prompt = f"""You are an expert AI platform maturity consultant.
-You have just completed an assessment of an organisation's AI maturity across 6 dimensions.
-
-Here are the assessment results:
-
-Overall Score: {result.overall_score}/5.0
-Maturity Level: {result.maturity_label} (Level {result.maturity_tier})
-
-Dimension Scores and Responses:
-{json.dumps(dimension_context, indent=2)}
-
-Based on this assessment data, provide a structured analysis in the following JSON format:
-{{
-    "executive_narrative": "3 paragraphs of executive-level narrative summarising the organisation's AI maturity, key strengths, and critical gaps. Be specific and reference actual scores and answers.",
-    "cross_dimensional_risks": [
-        {{
-            "risk": "Risk title",
-            "description": "2-3 sentence description of the risk and its business impact",
-            "dimensions_affected": ["dimension1", "dimension2"]
-        }}
-    ],
-    "quick_wins": [
-        {{
-            "action": "Specific action title",
-            "description": "Why this is high impact and low effort given current maturity",
-            "expected_outcome": "What improvement this will drive"
-        }}
-    ],
-    "ninety_day_focus": [
-        {{
-            "priority": 1,
-            "focus_area": "Focus area title",
-            "rationale": "Why this should be the priority in the next 90 days",
-            "success_metric": "How to measure success"
-        }}
-    ]
-}}
-
-Provide exactly 3 cross_dimensional_risks, 3 quick_wins, and 3 ninety_day_focus items.
-Return ONLY valid JSON, no markdown, no preamble."""
-
-    try:
-        response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 4096,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=60.0,
-        )
-
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Claude API error: {response.text}"
-            )
-
-        content = response.json()["content"][0]["text"]
-        analysis = json.loads(content)
-        return analysis
-
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to parse Claude response: {str(e)}"
-        )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail="Claude API timed out. Please try again."
-        )
 
 @router.post("/{assessment_id}/roadmap")
 def generate_roadmap(
     assessment_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Calls Claude API to generate a 6-month AI maturity improvement roadmap
-    based on the assessment results.
-    """
     assessment = _get_assessment_or_404(assessment_id, db, current_user)
-
     if assessment.status != "completed":
         raise HTTPException(status_code=400, detail="Assessment must be completed first")
 
     result = db.query(Result).filter(
         Result.assessment_id == assessment_id
     ).first()
-
     if not result:
         raise HTTPException(status_code=404, detail="Result not found")
 
-    # Build dimension summary for prompt
-    dimension_summary = []
-    for dim in result.dimension_scores:
-        dimension_summary.append({
-            "dimension": dim["label"],
-            "current_score": dim["score"],
-            "current_tier": dim["tier_label"],
-            "current_level": dim["tier"],
-        })
+    # Return cached result if available
+    if result.ai_roadmap and result.roadmap_status == "complete":
+        return {"status": "complete", "data": result.ai_roadmap}
 
-    prompt = f"""You are an expert AI platform maturity consultant advising C-suite and VP-level engineering leaders.
+    # If already generating, return status
+    if result.roadmap_status == "generating":
+        return {"status": "generating", "data": None}
 
-An organisation has completed an AI maturity assessment with the following results:
+    # Trigger background job
+    background_tasks.add_task(_run_roadmap_background, assessment_id, db)
+    return {"status": "generating", "data": None}
 
-Overall Score: {result.overall_score}/5.0
-Maturity Level: {result.maturity_label} (Level {result.maturity_tier})
 
-Dimension Scores:
-{json.dumps(dimension_summary, indent=2)}
+@router.get("/{assessment_id}/analyse/status")
+def get_analyse_status(
+    assessment_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    _get_assessment_or_404(assessment_id, db, current_user)
+    result = db.query(Result).filter(
+        Result.assessment_id == assessment_id
+    ).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return {
+        "status": result.analysis_status or "pending",
+        "data": result.ai_analysis
+    }
 
-CONTEXT: Many organisations claim to be "AI-first" but lack the foundational capabilities to deliver on that promise. 
-This roadmap must ground leadership in reality — not just improve maturity scores, but deliver measurable business outcomes.
-Every initiative must answer three questions a CEO or board would ask:
-1. What business problem does this solve?
-2. What is the measurable business outcome?
-3. What is the cost of NOT doing this?
 
-Generate a practical 6-month AI maturity improvement roadmap organised into 3 phases.
-Focus on moving the organisation to the next maturity tier with clear business value at each step.
-
-Return ONLY valid JSON in exactly this format, no markdown, no preamble:
-{{
-    "roadmap_summary": "2-3 sentence summary of the roadmap strategy, target state, and primary business value delivered",
-    "target_overall_score": 3.8,
-    "target_maturity_label": "Managed",
-    "estimated_business_value": "One sentence on the aggregate business value of completing this roadmap",
-    "phases": [
-        {{
-            "phase": 1,
-            "name": "Foundation",
-            "months": "Months 1-2",
-            "theme": "One sentence describing the phase theme",
-            "business_objective": "What business outcome does this phase unlock?",
-            "initiatives": [
-                {{
-                    "title": "Initiative title",
-                    "description": "2-3 sentence description of what to do and why",
-                    "dimension": "Dimension name this primarily addresses",
-                    "owner": "Job title of who should lead this",
-                    "effort": "Low|Medium|High",
-                    "impact": "Low|Medium|High",
-                    "dependencies": "None or name of prerequisite initiative",
-                    "score_improvement": 0.5,
-                    "business_value": "Specific measurable business outcome — e.g. reduces model deployment time from weeks to hours, enabling 3x faster product iteration",
-                    "cost_of_inaction": "What happens if this is NOT done — e.g. continued manual pipelines mean each model release risks 2-3 weeks of delay and $50K+ in engineering cost",
-                    "roi_signal": "Quantified or directional ROI — e.g. 40% reduction in data engineering rework, freeing 2 FTE for higher-value work"
-                }}
-            ],
-            "target_dimension_scores": {{
-                "Data & Data Infrastructure": 2.8,
-                "Model Development & MLOps": 2.5
-            }},
-            "phase_business_outcome": "Measurable outcome at end of this phase that a CEO would recognise as progress"
-        }}
-    ]
-}}
-
-Rules:
-- Phase 1 (Months 1-2): Foundation — quick wins and critical fixes that unlock everything else
-- Phase 2 (Months 3-4): Acceleration — build on foundation, address key capability gaps
-- Phase 3 (Months 5-6): Optimisation — institutionalise, scale, and measure business impact
-- Each phase must have 3-4 initiatives
-- business_value must be specific and measurable — avoid vague statements like "improves efficiency"
-- cost_of_inaction must be concrete — what risk or cost does leadership accept by delaying?
-- roi_signal must give a directional number or percentage where possible
-- Reference actual dimension scores in your reasoning
-- target_dimension_scores should show realistic incremental improvement per phase
-- Return ONLY valid JSON"""
-
-    try:
-        response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": os.environ.get("ANTHROPIC_API_KEY", ""),
-                "anthropic-version": "2023-06-01",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 4096,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=60.0,
-        )
-
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Claude API error: {response.text}"
-            )
-
-        content = response.json()["content"][0]["text"]
-        roadmap = json.loads(content)
-        return roadmap
-
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Failed to parse Claude response: {str(e)}"
-        )
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=504,
-            detail="Claude API timed out. Please try again."
-        )
+@router.get("/{assessment_id}/roadmap/status")
+def get_roadmap_status(
+    assessment_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    _get_assessment_or_404(assessment_id, db, current_user)
+    result = db.query(Result).filter(
+        Result.assessment_id == assessment_id
+    ).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return {
+        "status": result.roadmap_status or "pending",
+        "data": result.ai_roadmap
+    }
     
 @router.delete("/{assessment_id}", status_code=204)
 def delete_assessment(

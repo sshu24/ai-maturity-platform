@@ -52,6 +52,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    organisation_id: Optional[str] = None
 
 
 class OrgCreate(BaseModel):
@@ -298,6 +299,10 @@ def update_user(
         user.role = payload.role
     if payload.is_active is not None:
         user.is_active = payload.is_active
+    if payload.organisation_id is not None:
+        if current_user.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admins can change a user's organisation")
+        user.organisation_id = payload.organisation_id
 
     db.commit()
     db.refresh(user)

@@ -551,156 +551,226 @@ def show_scorecard_page():
 
     with tab_ai:
         st.subheader("AI-Powered Analysis")
-        st.caption("Powered by Claude — personalised executive analysis based on your responses.")
+        st.caption("Powered by Claude — generates a personalised executive analysis.")
         st.divider()
 
-        if st.button("Generate AI Analysis", type="primary", key="gen_analysis"):
-            with st.spinner("Claude is analysing your assessment... this may take 15-20 seconds."):
-                r = api_post(f"/assessments/{assessment_id}/analyse", data={}, timeout=60)
-            if r["ok"]:
-                st.session_state["ai_analysis"] = r["data"]
-            else:
-                st.error(f"Analysis failed: {r['data'].get('detail', 'Unknown error')}")
+        # Check current status
+        status_result = api_get(f"/assessments/{assessment_id}/analyse/status")
+        analysis_status = status_result["data"].get("status", "pending") if status_result["ok"] else "pending"
+        cached_analysis = status_result["data"].get("data") if status_result["ok"] else None
 
-        analysis = st.session_state.get("ai_analysis")
-        if analysis:
-            st.subheader("Executive Narrative")
-            for key in ["executive_narrative", "executive_narrative_p2", "executive_narrative_p3"]:
-                if key in analysis:
-                    st.markdown(f"> {analysis[key]}")
-                    st.write("")
+        if cached_analysis and analysis_status == "complete":
+            st.session_state["ai_analysis"] = cached_analysis
 
-            risks = analysis.get("cross_dimensional_risks", [])
-            if risks:
-                st.divider()
-                st.subheader("Cross-Dimensional Risks")
-                for risk in risks:
-                    with st.expander(f"⚠️ {risk.get('risk', 'Risk')}", expanded=True):
-                        st.write(risk.get("description", ""))
-                        dims = risk.get("dimensions_affected", [])
-                        if dims:
-                            st.caption(f"Dimensions affected: {', '.join(dims)}")
+        if analysis_status == "generating":
+            st.info("Claude is generating your analysis... this page will refresh automatically.")
+            import time
+            time.sleep(5)
+            st.rerun()
+        elif analysis_status == "complete" and st.session_state.get("ai_analysis"):
+            if st.button("Regenerate Analysis", key="regen_analysis"):
+                api_post(f"/assessments/{assessment_id}/analyse", data={}, timeout=10)
+                st.session_state.pop("ai_analysis", None)
+                st.rerun()
 
-            wins = analysis.get("quick_wins", [])
-            if wins:
-                st.divider()
-                st.subheader("Quick Wins")
-                for i, win in enumerate(wins, 1):
-                    col1, col2 = st.columns([1, 10])
-                    with col1:
+            analysis = st.session_state.get("ai_analysis")
+            if analysis:
+                st.subheader("Executive Narrative")
+                for key in ["executive_narrative", "executive_narrative_p2", "executive_narrative_p3"]:
+                    if key in analysis:
+                        st.markdown(f"> {analysis[key]}")
+                        st.write("")
+
+                risks = analysis.get("cross_dimensional_risks", [])
+                if risks:
+                    st.divider()
+                    st.subheader("Cross-Dimensional Risks")
+                    for risk in risks:
+                        with st.expander(f"⚠️ {risk.get('risk', 'Risk')}", expanded=True):
+                            st.write(risk.get("description", ""))
+                            dims = risk.get("dimensions_affected", [])
+                            if dims:
+                                st.caption(f"Dimensions affected: {', '.join(dims)}")
+
+                wins = analysis.get("quick_wins", [])
+                if wins:
+                    st.divider()
+                    st.subheader("Quick Wins")
+                    for i, win in enumerate(wins, 1):
+                        col1, col2 = st.columns([1, 10])
+                        with col1:
+                            st.markdown(
+                                f'<div style="width:32px;height:32px;border-radius:50%;background:#27ae60;'
+                                f'color:white;display:flex;align-items:center;justify-content:center;'
+                                f'font-weight:700;">{i}</div>', unsafe_allow_html=True
+                            )
+                        with col2:
+                            st.markdown(f"**{win.get('action', '')}**")
+                            st.write(win.get("description", ""))
+                            st.caption(f"Expected outcome: {win.get('expected_outcome', '')}")
+                        st.write("")
+
+                focus = analysis.get("ninety_day_focus", [])
+                if focus:
+                    st.divider()
+                    st.subheader("90-Day Focus Areas")
+                    for item in sorted(focus, key=lambda x: x.get("priority", 0)):
                         st.markdown(
-                            f'<div style="width:32px;height:32px;border-radius:50%;background:#27ae60;'
-                            f'color:white;display:flex;align-items:center;justify-content:center;'
-                            f'font-weight:700;">{i}</div>', unsafe_allow_html=True
+                            f"""<div style="border-left:4px solid #2980b9;padding:12px 16px;
+                                margin-bottom:12px;background:#e8f4fb;border-radius:4px;">
+                                <div style="font-size:11px;color:#2980b9;font-weight:600;
+                                    text-transform:uppercase;margin-bottom:4px;">
+                                    Priority {item.get('priority', '')}</div>
+                                <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-bottom:6px;">
+                                    {item.get('focus_area', '')}</div>
+                                <div style="font-size:13px;color:#333;margin-bottom:6px;">
+                                    {item.get('rationale', '')}</div>
+                                <div style="font-size:12px;color:#555;">
+                                    <strong>Success metric:</strong> {item.get('success_metric', '')}</div>
+                            </div>""", unsafe_allow_html=True
                         )
-                    with col2:
-                        st.markdown(f"**{win.get('action', '')}**")
-                        st.write(win.get("description", ""))
-                        st.caption(f"Expected outcome: {win.get('expected_outcome', '')}")
-                    st.write("")
-
-            focus = analysis.get("ninety_day_focus", [])
-            if focus:
-                st.divider()
-                st.subheader("90-Day Focus Areas")
-                for item in sorted(focus, key=lambda x: x.get("priority", 0)):
-                    st.markdown(
-                        f"""<div style="border-left:4px solid #2980b9;padding:12px 16px;
-                            margin-bottom:12px;background:#e8f4fb;border-radius:4px;">
-                            <div style="font-size:11px;color:#2980b9;font-weight:600;
-                                text-transform:uppercase;margin-bottom:4px;">
-                                Priority {item.get('priority', '')}</div>
-                            <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-bottom:6px;">
-                                {item.get('focus_area', '')}</div>
-                            <div style="font-size:13px;color:#333;margin-bottom:6px;">
-                                {item.get('rationale', '')}</div>
-                            <div style="font-size:12px;color:#555;">
-                                <strong>Success metric:</strong> {item.get('success_metric', '')}</div>
-                        </div>""", unsafe_allow_html=True
-                    )
         else:
+            if st.button("Generate AI Analysis", type="primary", key="gen_analysis"):
+                api_post(f"/assessments/{assessment_id}/analyse", data={}, timeout=10)
+                st.rerun()
             st.info("Click 'Generate AI Analysis' to get a personalised executive analysis.")
 
     with tab_roadmap:
-        st.subheader("AI-Generated 6-Month Roadmap")
-        st.caption("Powered by Claude — a prioritised improvement roadmap based on your scores.")
-        st.divider()
+        n_state["ai_roadmap"] = cached_roadmap
 
-        if st.button("Generate Roadmap", type="primary", key="gen_roadmap"):
-            with st.spinner("Claude is building your roadmap... this may take 15-20 seconds."):
-                r = api_post(f"/assessments/{assessment_id}/roadmap", data={}, timeout=60)
-            if r["ok"]:
-                st.session_state["ai_roadmap"] = r["data"]
-            else:
-                st.error(f"Roadmap failed: {r['data'].get('detail', 'Unknown error')}")
+        if roadmap_status == "generating":
+            st.info("Claude is generating your roadmap... this page will refresh automatically.")
+            import time
+            time.sleep(5)
+            st.rerun()
+        elif roadmap_status == "complete" and st.session_state.get("ai_roadmap"):
+            if st.button("Regenerate Roadmap", key="regen_roadmap"):
+                api_post(f"/assessments/{assessment_id}/roadmap", data={}, timeout=10)
+                st.session_state.pop("ai_roadmap", None)
+                st.rerun()
 
-        roadmap = st.session_state.get("ai_roadmap")
-        if roadmap:
-            target_score = roadmap.get("target_overall_score", 0)
-            target_label = roadmap.get("target_maturity_label", "")
-            st.markdown(
-                f"""<div style="background:#e9f7ef;border-left:6px solid #27ae60;
-                    padding:16px 20px;border-radius:6px;margin-bottom:20px;">
-                    <div style="font-size:13px;color:#555;margin-bottom:4px;">Roadmap Target</div>
-                    <div style="font-size:24px;font-weight:700;color:#27ae60;">
-                        {target_label} — Score {target_score}</div>
-                    <div style="font-size:14px;color:#333;margin-top:8px;">
-                        {roadmap.get('roadmap_summary', '')}</div>
-                </div>""", unsafe_allow_html=True
-            )
-
-            phase_colors = {1: "#e67e22", 2: "#2980b9", 3: "#27ae60"}
-            for phase in roadmap.get("phases", []):
-                phase_num = phase.get("phase", 0)
-                phase_color = phase_colors.get(phase_num, "#95a5a6")
+            roadmap = st.session_state.get("ai_roadmap")
+            if roadmap:
+                target_score = roadmap.get("target_overall_score", 0)
+                target_label = roadmap.get("target_maturity_label", "")
                 st.markdown(
-                 #   f"""<div style="background:{phase_color};color:white;padding:12px 16px;
-                 #       border-radius:6px 6px 0 0;margin-top:20px;">
-                 #       <div style="font-size:12px;font-weight:600;text-transform:uppercase;opacity:0.85;">
-                 #          Phase {phase_num} — {phase.get('months', '')}</div>
-                 #       <div style="font-size:18px;font-weight:700;">{phase.get('name', '')}</div>
-                 #       <div style="font-size:13px;opacity:0.9;margin-top:4px;">{phase.get('theme', '')}</div>
-                 #   </div>""", unsafe_allow_html=True
-                    tier_badge(tier, data['maturity_label'], data['overall_score'])
+                    f"""<div style="background:#e9f7ef;border-left:6px solid #27ae60;
+                        padding:16px 20px;border-radius:6px;margin-bottom:20px;">
+                        <div style="font-size:13px;color:#555;margin-bottom:4px;">Roadmap Target</div>
+                        <div style="font-size:24px;font-weight:700;color:#27ae60;">
+                            {target_label} — Score {target_score}</div>
+                        <div style="font-size:14px;color:#333;margin-top:8px;">
+                            {roadmap.get('roadmap_summary', '')}</div>
+                    </div>""", unsafe_allow_html=True
                 )
-                for init in phase.get("initiatives", []):
-                    effort = init.get("effort", "Medium")
-                    impact = init.get("impact", "Medium")
-                    with st.expander(
-                        f"{init.get('title', 'Initiative')} — {init.get('dimension', '')}",
-                        expanded=False
-                    ):
-                        st.write(init.get("description", ""))
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.markdown(
-                                f'<span style="background:{EFFORT_COLORS.get(effort,"#95a5a6")};'
-                                f'color:white;padding:2px 8px;border-radius:4px;font-size:12px;">'
-                                f'Effort: {effort}</span>', unsafe_allow_html=True
-                            )
-                        with col2:
-                            st.markdown(
-                                f'<span style="background:{IMPACT_COLORS.get(impact,"#95a5a6")};'
-                                f'color:white;padding:2px 8px;border-radius:4px;font-size:12px;">'
-                                f'Impact: {impact}</span>', unsafe_allow_html=True
-                            )
-                        with col3:
-                            st.caption(f"Owner: {init.get('owner', '')}")
-                        with col4:
-                            st.caption(f"Score improvement: +{init.get('score_improvement', 0)}")
-                        deps = init.get("dependencies", "None")
-                        if deps and deps != "None":
-                            st.caption(f"Depends on: {deps}")
 
-                target_scores = phase.get("target_dimension_scores", {})
-                if target_scores:
-                    cols = st.columns(len(target_scores))
-                    for i, (dim_name, score) in enumerate(target_scores.items()):
-                        with cols[i]:
-                            st.metric(label=dim_name.split("&")[0].strip(), value=f"{score:.2f}")
+                if roadmap.get("estimated_business_value"):
+                    st.markdown(
+                        f"""<div style="background:#f8f9fa;border:1px solid #ecf0f1;
+                            padding:12px 16px;border-radius:6px;margin-bottom:16px;">
+                            <span style="font-size:12px;color:#7f8c8d;font-weight:500;
+                                text-transform:uppercase;">Aggregate Business Value</span><br>
+                            <span style="font-size:14px;color:#1a1a2e;font-weight:500;">
+                                {roadmap.get('estimated_business_value', '')}</span>
+                        </div>""", unsafe_allow_html=True
+                    )
+
+                phase_colors = {1: "#e67e22", 2: "#2980b9", 3: "#27ae60"}
+                for phase in roadmap.get("phases", []):
+                    phase_num = phase.get("phase", 0)
+                    phase_color = phase_colors.get(phase_num, "#95a5a6")
+                    st.markdown(
+                        f"""<div style="background:{phase_color};color:white;padding:12px 16px;
+                            border-radius:6px 6px 0 0;margin-top:20px;">
+                            <div style="font-size:12px;font-weight:600;text-transform:uppercase;opacity:0.85;">
+                                Phase {phase_num} — {phase.get('months', '')}</div>
+                            <div style="font-size:18px;font-weight:700;">{phase.get('name', '')}</div>
+                            <div style="font-size:13px;opacity:0.9;margin-top:4px;">{phase.get('theme', '')}</div>
+                        </div>""", unsafe_allow_html=True
+                    )
+
+                    if phase.get("business_objective"):
+                        st.markdown(
+                            f"""<div style="background:#f8f9fa;padding:8px 16px;margin-bottom:4px;">
+                                <span style="font-size:12px;color:#555;font-weight:500;">
+                                Business objective: </span>
+                                <span style="font-size:13px;color:#333;">
+                                {phase.get('business_objective', '')}</span>
+                            </div>""", unsafe_allow_html=True
+                        )
+
+                    for init in phase.get("initiatives", []):
+                        effort = init.get("effort", "Medium")
+                        impact = init.get("impact", "Medium")
+                        with st.expander(
+                            f"{init.get('title', 'Initiative')} — {init.get('dimension', '')}",
+                            expanded=False
+                        ):
+                            st.write(init.get("description", ""))
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.markdown(
+                                    f'<span style="background:{EFFORT_COLORS.get(effort,"#95a5a6")};'
+                                    f'color:white;padding:2px 8px;border-radius:4px;font-size:12px;">'
+                                    f'Effort: {effort}</span>', unsafe_allow_html=True
+                                )
+                            with col2:
+                                st.markdown(
+                                    f'<span style="background:{IMPACT_COLORS.get(impact,"#95a5a6")};'
+                                    f'color:white;padding:2px 8px;border-radius:4px;font-size:12px;">'
+                                    f'Impact: {impact}</span>', unsafe_allow_html=True
+                                )
+                            with col3:
+                                st.caption(f"Owner: {init.get('owner', '')}")
+                            with col4:
+                                st.caption(f"Score improvement: +{init.get('score_improvement', 0)}")
+
+                            if init.get("business_value"):
+                                st.markdown(
+                                    f"""<div style="background:#e9f7ef;border-left:3px solid #27ae60;
+                                        padding:8px 12px;border-radius:4px;margin-top:8px;">
+                                        <div style="font-size:11px;color:#27ae60;font-weight:600;
+                                            text-transform:uppercase;margin-bottom:3px;">Business Value</div>
+                                        <div style="font-size:13px;color:#1a1a2e;">
+                                            {init.get('business_value', '')}</div>
+                                    </div>""", unsafe_allow_html=True
+                                )
+                            if init.get("cost_of_inaction"):
+                                st.markdown(
+                                    f"""<div style="background:#fdecea;border-left:3px solid #e74c3c;
+                                        padding:8px 12px;border-radius:4px;margin-top:6px;">
+                                        <div style="font-size:11px;color:#e74c3c;font-weight:600;
+                                            text-transform:uppercase;margin-bottom:3px;">Cost of Inaction</div>
+                                        <div style="font-size:13px;color:#1a1a2e;">
+                                            {init.get('cost_of_inaction', '')}</div>
+                                    </div>""", unsafe_allow_html=True
+                                )
+                            if init.get("roi_signal"):
+                                st.markdown(
+                                    f"""<div style="background:#e8f4fb;border-left:3px solid #2980b9;
+                                        padding:8px 12px;border-radius:4px;margin-top:6px;">
+                                        <div style="font-size:11px;color:#2980b9;font-weight:600;
+                                            text-transform:uppercase;margin-bottom:3px;">ROI Signal</div>
+                                        <div style="font-size:13px;color:#1a1a2e;">
+                                            {init.get('roi_signal', '')}</div>
+                                    </div>""", unsafe_allow_html=True
+                                )
+                            deps = init.get("dependencies", "None")
+                            if deps and deps != "None":
+                                st.caption(f"Depends on: {deps}")
+
+                    target_scores = phase.get("target_dimension_scores", {})
+                    if target_scores:
+                        cols = st.columns(len(target_scores))
+                        for i, (dim_name, score) in enumerate(target_scores.items()):
+                            with cols[i]:
+                                st.metric(label=dim_name.split("&")[0].strip(), value=f"{score:.2f}")
         else:
+            if st.button("Generate Roadmap", type="primary", key="gen_roadmap"):
+                api_post(f"/assessments/{assessment_id}/roadmap", data={}, timeout=10)
+                st.rerun()
             st.info("Click 'Generate Roadmap' to get a personalised 6-month improvement plan.")
-
+        
 
 # ------------------------------------------------------------------
 # Admin panel
@@ -721,7 +791,17 @@ def show_admin_page():
         if stats_result["ok"]:
             stats = stats_result["data"]
             col1, col2, col3, col4, col5 = st.columns(5)
-            with col1:
+            with col1:st.subheader("AI-Generated 6-Month Roadmap")
+            st.caption("Powered by Claude — a prioritised improvement roadmap.")
+            st.divider()
+ 
+            # Check current status
+            status_result = api_get(f"/assessments/{assessment_id}/roadmap/status")
+            roadmap_status = status_result["data"].get("status", "pending") if status_result["ok"] else "pending"
+            cached_roadmap = status_result["data"].get("data") if status_result["ok"] else None
+ 
+            if cached_roadmap and roadmap_status == "complete":
+                st.sessio
                 st.metric("Organisations", stats["total_orgs"])
             with col2:
                 st.metric("Users", stats["total_users"])

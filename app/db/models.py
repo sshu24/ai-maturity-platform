@@ -137,5 +137,9 @@ class Result(Base):
     dimension_scores = Column(JSON, nullable=False)
     recommendations = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    ai_analysis = Column(JSON, nullable=True)
+    ai_roadmap = Column(JSON, nullable=True)
+    analysis_status = Column(String(20), nullable=True, default="pending")
+    roadmap_status = Column(String(20), nullable=True, default="pending")
 
     assessment = relationship("Assessment", back_populates="result")
