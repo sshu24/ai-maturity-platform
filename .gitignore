@@ -8,3 +8,9 @@ __pycache__/
 venv/
 *.log
 .pytest_cache/
+
+# Local DB dumps
+*.sql
+
+# Node
+node_modules/
