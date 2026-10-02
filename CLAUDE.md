@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AI maturity assessment platform: users answer a 42-question assessment (6 dimensions × 7 questions), it gets scored into one of 5 maturity tiers, and Claude produces an executive analysis and a 6-month roadmap. Stack: FastAPI backend, Streamlit frontend, PostgreSQL 16 (SQLAlchemy + Alembic), and AWS CDK infra in `infra/`.
 
+Design and endpoint references are in `docs/ARCHITECTURE.md` and `docs/API.md`. Update them when you change endpoints, roles, the data model or the AI job flow.
+
 ## Commands
 
 Local dev runs entirely through Docker Compose. `./app` is bind-mounted into both containers, and uvicorn runs with `--reload`, so code changes apply without a rebuild.

@@ -281,6 +281,24 @@ Uses Claude to generate a phased 6-month improvement roadmap:
 
 ---
 
+## Documentation
+
+- **[API Reference](docs/API.md)**: every endpoint, with roles, request and response shapes, the AI job polling protocol, and known gaps
+- **[Architecture](docs/ARCHITECTURE.md)**: components, data model, key flows, AWS deployment, design decisions and limitations
+
+Interactive API docs: `http://localhost:8000/docs` (development only)
+
+---
+
+## Roadmap Generator Agent
+Uses Claude to generate a phased 6-month improvement roadmap:
+- 3 phases: Foundation → Acceleration → Optimisation
+- 3-4 initiatives per phase with owner, effort, impact ratings
+- Dependencies between initiatives
+- Target dimension scores at end of each phase
+
+---
+
 ## API Reference
 
 | Method | Endpoint | Description |
